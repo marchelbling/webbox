@@ -2,6 +2,7 @@ package app
 
 import (
 	"embed"
+	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
@@ -14,10 +15,14 @@ import (
 //go:embed static
 var staticRootFS embed.FS
 
+//go:embed templates
+var templatesRootFS embed.FS
+
 // Application defines the API.
 type Application struct {
 	router       *mux.Router
 	staticServer http.Handler
+	template     *template.Template
 }
 
 // New creates a new application instance.
@@ -32,29 +37,83 @@ func New() (*Application, error) {
 
 	staticFS, err := fs.Sub(staticRootFS, "static")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("static: %v", err)
 	}
-	staticServer := http.FileServer(http.FS(staticFS))
+
+	templatesFS, err := fs.Sub(templatesRootFS, "templates")
+	if err != nil {
+		log.Fatalf("templates: %v", err)
+	}
 
 	return &Application{
-		staticServer: staticServer,
+		staticServer: http.FileServer(&HTTPFileOnlyFS{http.FS(staticFS)}),
 		router:       mux.NewRouter(),
+		templates:    templatesFS,
 	}, nil
 }
 
 // Routes registers the application routes.
 func (a *Application) Routes() http.Handler {
-	a.router.HandleFunc("/", Main)
-	a.router.HandleFunc("/register", Register)
+	a.router.HandleFunc("/", a.GetMain).Methods(http.MethodOptions, http.MethodGet)
+	a.router.HandleFunc("/register", a.GetRegister).Methods(http.MethodOptions, http.MethodGet)
+	a.router.HandleFunc("/register", a.PostRegister).Methods(http.MethodOptions, http.MethodPost)
 	a.router.PathPrefix("/").Handler(http.StripPrefix("/static/", a.staticServer))
 	return a.router
 }
 
 // Main is the handler that serves the main page.
-func Main(w http.ResponseWriter, req *http.Request) {
+func (a *Application) GetMain(w http.ResponseWriter, req *http.Request) {
+	files := []string{
+		"base.tmpl",
+		"partials/nav.tmpl",
+		"pages/home.tmpl",
+	}
+
+	ts, err := template.ParseFS(a.templates, files...)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, "base", nil)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", 500)
+	}
 }
 
 // Register is the handler that registers a new user.
-func Register(w http.ResponseWriter, req *http.Request) {
-	w.WriteHeader(http.StatusOK)
+func (a *Application) GetRegister(w http.ResponseWriter, req *http.Request) {
+	files := []string{
+		"base.tmpl",
+		"partials/nav.tmpl",
+		"pages/register.tmpl",
+	}
+
+	ts, err := template.ParseFS(a.templates, files...)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", 500)
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, "base", nil)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", 500)
+	}
+}
+
+func (a *Application) PostRegister(w http.ResponseWriter, req *http.Request) {
+	err := req.ParseForm()
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", 500)
+	}
+
+	for key, value := range req.PostForm {
+		log.Printf("o<<< register: %s = %s", key, value)
+	}
+	http.Redirect(w, req, "/", http.StatusFound)
 }

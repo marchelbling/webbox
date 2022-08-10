@@ -1,0 +1,21 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="/static/webbox.css" />
+    <title>Webbox — {{template "title" .}}</title>
+  </head>
+
+  <body>
+    <header>
+        <h1><a href='/'>Webbox</a></h1>
+    </header>
+    {{template "nav" .}}
+
+    <main>
+        {{template "main" .}}
+    </main>
+  </body>
+</html>
+{{end}}
