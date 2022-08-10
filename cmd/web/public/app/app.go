@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
 	"github.com/marchelbling/webbox/pkg/middleware"
@@ -22,7 +23,25 @@ var templatesRootFS embed.FS
 type Application struct {
 	router       *mux.Router
 	staticServer http.Handler
-	template     *template.Template
+	templates    fs.FS
+}
+
+type HTTPFileOnlyFS struct {
+	http.FileSystem
+}
+
+func (f *HTTPFileOnlyFS) Open(path string) (http.File, error) {
+	file, err := f.FileSystem.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := file.Stat()
+	if s.IsDir() {
+		return nil, os.ErrNotExist
+	}
+
+	return file, nil
 }
 
 // New creates a new application instance.
